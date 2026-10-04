@@ -4,7 +4,6 @@ A client-side **Don't Starve Together** mod for the that aims to add a better cl
 Mod is not fully develeped, it currently only supporst chopping/mining, collecting grass/twigs/crockpots and picking up the items and only upon pressing spacebar(quick action key).
 
 [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=???) 
----
 
 ## How it works
 
