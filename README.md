@@ -1,5 +1,7 @@
 # Better Lag Compensation
 
+https://github.com/user-attachments/assets/61e0997e-c160-441a-b32d-b9c41a2e17a8
+
 A client-side **Don't Starve Together** mod for the that aims to add a better client-side lag compensation method. 
 Mod is not fully develeped, it currently only supporst chopping/mining, collecting grass/twigs/crockpots and picking up the items and only upon pressing spacebar(quick action key).
 
