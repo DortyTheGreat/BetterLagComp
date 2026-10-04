@@ -6,8 +6,9 @@
 
 https://github.com/user-attachments/assets/61e0997e-c160-441a-b32d-b9c41a2e17a8
 
-A client-side **Don't Starve Together** mod that aims to add a better client-side lag compensation method. 
-Mod is not fully developed, it currently only supports chopping/mining, collecting grass/twigs/crockpots and picking up the items and only upon pressing spacebar(quick action key).
+A client-side **Don't Starve Together** mod that adds a better client-side lag compensation method. It reduces the delay between your input and the visual result by predicting certain actions locally instead of waiting for the server to confirm them.
+
+> ⚠️ **Status: Beta.** The mod currently supports a limited set of actions and is under development.
 
 [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3813222728) 
 
@@ -21,13 +22,11 @@ Fixing combat is planned and might be in reach of what is possible, although it'
 
 ## What is not possible
 
-Don't starve together was not designed with proper syncronization. Any game state cannot be predicted perfectly. 
+Don't starve together was not designed with proper syncronization. **Game states can be predicted perfectly.**
 
 For example: you were trying to pickup an item, but server suddenly decided to strike a lightning at you. Your client thinks that you have picked up an item (client is actively trying to show you the 'future'), although because an 'unexpected event' happened your client can no longer pick up an item in the planned future and thus a 'small rollback' happens.
 
-As you can see, it's simply impossible to fix lag compensation perfectly, since DST server has no implementation of 'commitment', nor does it support any 'plausibility' client packets (fun fact: minecraft has a VERY non-strict server logic, clients can even fly).
-
-A somewhat decent solution would be to make a server-side mod that would implement 'plausibility layer', maybe something similar to what GrimAntiCheat in Minecraft does.
+There is no way to fix this perfectly, because the DST server implements neither *commitment* nor *plausibility* checks on client packets. A proper fix would require a **server-side** mod that adds a plausibility layer, similar in spirit to GrimAntiCheat for Minecraft.
 
 ## Installation
 
