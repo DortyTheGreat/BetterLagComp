@@ -3,8 +3,7 @@
 A client-side **Don't Starve Together** mod for the that aims to add a better client-side lag compensation method. 
 Mod is not fully develeped, it currently only supporst chopping/mining, collecting grass/twigs/crockpots and picking up the items and only upon pressing spacebar(quick action key).
 
-[Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3809582066) 
-
+[Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=???) 
 ---
 
 ## How it works
@@ -27,7 +26,17 @@ A somewhat decent solution would be to make a server-side mod that would impleme
 
 ## Installation
 
-- **Steam:** subscribe on the [Workshop page](https://steamcommunity.com/sharedfiles/filedetails/?id=3809582066), then enable the mod in **Mods**.
+- **Steam:** subscribe on the [Workshop page](https://steamcommunity.com/sharedfiles/filedetails/?id=???), then enable the mod in **Mods**.
 - **Manual:** copy the mod folder into `Don't Starve Together/mods/`.
 
 This is a client-only mod. It works on any server and other players don't need it.
+
+### Supporting me
+
+I will try my best to make this mod work as best as it physically can, it would take time and I'm a bit exhausted from solving this issue right now.
+
+You can support me monetarily by gifting me some skins on Steam (I'm actually quite fascinated, that this is a more world-wide accepted paying method than actual bank cards). You could also give a star on a github page or recommend the mod to your friends, feels pretty nice too.
+
+### Contributing
+
+This mod is currently opened for your suggestions(issues) and/or pull requests.
