@@ -22,7 +22,7 @@ Fixing combat is planned and might be in reach of what is possible, although it'
 
 ## What is not possible
 
-Don't starve together was not designed with proper syncronization. **Game states can be predicted perfectly.**
+Don't starve together was not designed with proper syncronization. **Game states can't be predicted perfectly.**
 
 For example: you were trying to pickup an item, but server suddenly decided to strike a lightning at you. Your client thinks that you have picked up an item (client is actively trying to show you the 'future'), although because an 'unexpected event' happened your client can no longer pick up an item in the planned future and thus a 'small rollback' happens.
 
