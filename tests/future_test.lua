@@ -64,6 +64,26 @@ P.player_classified = { currentstate = { value = function() return server_state 
 function P:IsValid() return true end
 function P:DoPeriodicTask(_, fn) local t = { fn = fn }; function t:Cancel() t.dead = true end; table.insert(self.tasks, t); return t end
 
+-- a local entity with an updatelooper: its post-update runs in the loop after the server's frame
+function CreateEntity()
+    local d = { entity = { SetCanSleep = function() end }, valid = true }
+    function d:AddTag() end
+    function d:IsValid() return self.valid end
+    function d:Remove() self.valid = false end
+    function d:AddComponent(name)
+        assert(name == "updatelooper")
+        self.components = { updatelooper = {
+            AddPostUpdateFn = function(_, fn)
+                local task = { fn = fn }
+                table.insert(P.tasks, task)
+                d.Remove = function(self) self.valid = false; task.dead = true; WALL = {} end
+            end,
+            AddOnWallUpdateFn = function(_, fn) table.insert(WALL, function() fn(d, F) end) end,
+        } }
+    end
+    return d
+end
+WALL = {}
 local Future = require("blc/future")
 Future.notify = function(kind, text) print(string.format("[LAB] %-7s %s", kind, text)) end
 
@@ -84,34 +104,40 @@ local function Run(opt)
     shown = {}
     local delay = opt.delay or 9
     local swings = opt.swings or 4
+    local function ServerFrame(tick)
+            -- the server, as the client sees it
+            local st = tick - delay
+            if st == 0 and not opt.no_server then
+                server_state = "chop_start"
+                A:PlayAnimation("chop_pre")
+                if opt.clear then
+                    -- the client matches the server's start and goes idle: the game clears its copy
+                    -- of the server's state to 0 until the server's next state (ClearCachedServerState)
+                    P.sg.currentstate.name = "idle"
+                    server_state = "0"
+                end
+            end
+            if not opt.no_server and st >= 10 then
+                local k = math.floor((st - 10) / 14)
+                if k < swings and (st - 10) % 14 == 0 then
+                    server_state = "chop"
+                    A:PlayAnimation("chop_loop")
+                    if P.sg.currentstate.name == "chop_start" then P.sg.currentstate.name = "idle" end -- matched
+                elseif k >= swings and st == 10 + swings * 14 + 6 then
+                    server_state = "idle"
+                    A:PlayAnimation("idle_loop")
+                end
+            end
+    end
     for tick = 1, opt.ticks or 120 do
         TICK = tick
         A:Step()
-        -- the server, as the client sees it
-        local st = tick - delay
-        if st == 0 and not opt.no_server then
-            server_state = "chop_start"
-            A:PlayAnimation("chop_pre")
-            if opt.clear then
-                -- the client matches the server's start and goes idle: the game clears its copy
-                -- of the server's state to 0 until the server's next state (ClearCachedServerState)
-                P.sg.currentstate.name = "idle"
-                server_state = "0"
-            end
-        end
-        if not opt.no_server and st >= 10 then
-            local k = math.floor((st - 10) / 14)
-            if k < swings and (st - 10) % 14 == 0 then
-                server_state = "chop"
-                A:PlayAnimation("chop_loop")
-                if P.sg.currentstate.name == "chop_start" then P.sg.currentstate.name = "idle" end -- matched
-            elseif k >= swings and st == 10 + swings * 14 + 6 then
-                server_state = "idle"
-                A:PlayAnimation("idle_loop")
-            end
-        end
+        if not opt.late then ServerFrame(tick) end
         if opt.at ~= nil then opt.at(tick) end
         for _, t in ipairs(P.tasks) do if not t.dead then t.fn() end end
+        if opt.late then ServerFrame(tick) end -- the server's frame comes in after the post-update
+        if opt.foreign_at == tick then A:PlayAnimation("idle_loop") end
+        for _, w in ipairs(WALL) do w() end
         shown[tick] = { name = A.name, t = A.t }
     end
     Future.Stop(P)
@@ -144,6 +170,53 @@ do
     check(not lag, "no waiting pose")
     check(Matches(1, 60, 0), "the start of the swing, then a swing every 14 frames, from our start on")
     check(Count("re%-timed") == 0, "  the server's swings agree with it: nothing re-timed")
+end
+
+real_print("[run after the game frame (post-update), not as a task]")
+do
+    Run({ delay = 9, swings = 1, ticks = 3 })
+    Future.Start(P)
+    check(Future._state().driver ~= nil and Future._state().task == nil, "the future view runs in the post-update")
+    Future.Stop(P)
+end
+
+real_print("[the server's swings come in after the post-update, before drawing]")
+do
+    lines = {}
+    Run({ delay = 9, swings = 4, ticks = 90, late = true })
+    local back = false
+    for tick = 2, 60 do
+        local a, b = shown[tick - 1], shown[tick]
+        if a.name == b.name and b.t + 1.5 * F < a.t and a.t < 12 * F then back = true end
+    end
+    check(not back, "put back in the wall update: never drawn going back")
+    check(Count("in the wall update [1-9]") == 1, "  counted where they were caught")
+    check(Matches(1, 60, 0), "  and the swing is ours throughout")
+    lines = {}
+    Run({ delay = 9, swings = 4, ticks = 40, foreign_at = 30 })
+    check(Count("a frame of 'idle_loop' on you before drawing") == 1, "something else on you: not touched, noted by name")
+end
+
+real_print("[hits on your time line: one per swing, on the frame the server's lands]")
+do
+    local hits = {}
+    Future.impact = { Tick = function() end, Hit = function(kind) table.insert(hits, { tick = TICK, kind = kind }) end }
+    Run({ delay = 9, swings = 4, ticks = 60 })
+    Future.impact = nil
+    local loops, ok = 0, true
+    for tick = 1, 60 do
+        local a = shown[tick]
+        if a.name == "chop_loop" and a.t < F - 1e-6 then loops = loops + 1 end
+    end
+    for _, h in ipairs(hits) do
+        local a = shown[h.tick]
+        if h.kind ~= "chop" or a.name ~= "chop_loop" or math.abs(a.t - 2 * F) > 0.5 * F then ok = false end
+    end
+    check(#hits == loops and #hits >= 3, string.format("a hit for each swing shown (%d swings, %d hits)", loops, #hits))
+    if os.getenv("DUMP") then
+        for _, h in ipairs(hits) do real_print(h.tick, shown[h.tick].name, string.format("%.2f", shown[h.tick].t / F)) end
+    end
+    check(ok, "  each on frame 2 of the swing, where the server's chop lands")
 end
 
 real_print("[the server starts 6 frames late (it walked first)]")

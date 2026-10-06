@@ -6,6 +6,7 @@ local api = {
     AddPlayerPostInit = AddPlayerPostInit,
     AddComponentPostInit = AddComponentPostInit,
     AddStategraphPostInit = AddStategraphPostInit,
+    AddPrefabPostInit = AddPrefabPostInit,
 }
 local config = {
     lab = GetModConfigData("lab"),

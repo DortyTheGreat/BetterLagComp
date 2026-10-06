@@ -11,7 +11,7 @@ which must stay ON (Predictive). F8 switches it, to compare.
 Lag Lab: logs corrections (rollbacks), server pauses, refused actions, the pace and where fast
 chains waited to client_log.txt, with a summary every minute.]]
 author = "DortyTheGreat"
-version = "0.9.2"
+version = "0.10.2"
 api_version = 10
 dst_compatible = true
 dont_starve_compatible = false
@@ -90,7 +90,8 @@ configuration_options = {
     {
         name = "future", label = "Future view: tool work",
         hover = "Chopping, mining, digging, hammering: your swing is shown on your time line from the start, "
-            .. "no waiting pose. Off with fast chains (F8) too.",
+            .. "no waiting pose; trees and rocks react (shake, needles, dust, sound) when your swing lands, not a "
+            .. "round trip later. Off with fast chains (F8) too.",
         options = { { description = "On", data = true }, { description = "Off", data = false } },
         default = true,
     },

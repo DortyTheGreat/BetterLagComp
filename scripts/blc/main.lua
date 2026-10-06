@@ -6,6 +6,7 @@ local CombatLab = require("blc/combatlab")
 local Cue = require("blc/cue")
 local Future = require("blc/future")
 local MobPos = require("blc/mobpos")
+local Impact = require("blc/impact")
 
 local BLC = { config = {} }
 
@@ -54,6 +55,7 @@ function BLC.Boot(api, config)
         Lab.Configure(BLC.config)
         CombatLab.notify = Lab.Event
         Future.notify = Lab.Event
+        Impact.notify = Lab.Event
     end
     CombatLab.probes = lab and BLC.config.probes ~= false
     CombatLab.probe_swing = not future -- answered; it would fight the future view over the animation
@@ -74,16 +76,29 @@ function BLC.Boot(api, config)
         end)
         HookKey(BLC.config.pipeline_key)
     end
+    if future then
+        -- hits on your time line: the server's copies of the effects shown here are not made again
+        Future.impact = Impact
+        if api.AddPrefabPostInit ~= nil then
+            for _, name in ipairs(Impact.FX) do
+                api.AddPrefabPostInit(name, function(inst) Util.SafeCall("hit effect", Impact.ProxyInit, inst) end)
+            end
+        end
+    end
     api.AddPlayerPostInit(function(inst)
         inst:ListenForEvent("playeractivated", function()
             if inst ~= Util.Player() then return end
             if lab then Util.SafeCall("lab start", Lab.Start, inst) end
             if combat then Util.SafeCall("combat watch start", CombatLab.Start, inst) end
             if fast then Util.SafeCall("fast chains start", Pipe.Start, inst) end
-            if future then Util.SafeCall("future view start", Future.Start, inst) end
+            if future then
+                Util.SafeCall("future view start", Future.Start, inst)
+                Util.SafeCall("hits start", Impact.Start, inst)
+            end
         end)
         inst:ListenForEvent("playerdeactivated", function()
             Util.SafeCall("future view stop", Future.Stop, inst)
+            Util.SafeCall("hits stop", Impact.Stop)
             Util.SafeCall("combat watch stop", CombatLab.Stop, inst)
             Util.SafeCall("lab stop", Lab.Stop, inst)
             Util.SafeCall("fast chains stop", Pipe.Stop, inst)

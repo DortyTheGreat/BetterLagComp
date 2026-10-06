@@ -813,6 +813,12 @@ function Pipe.FollowDelay()
 end
 
 function Pipe.WorkDone() return s ~= nil and WorkDone() end
+-- the target of the tool work last asked for, and the tag it has while it can be worked
+function Pipe.WorkTarget()
+    local w = s ~= nil and s.work or nil
+    if w == nil or type(w.target) ~= "table" or w.target.IsValid == nil or not w.target:IsValid() then return nil end
+    return w.target, w.tag
+end
 
 function Pipe._state() return s end
 

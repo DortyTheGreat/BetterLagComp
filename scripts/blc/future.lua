@@ -22,9 +22,11 @@ local TOLERANCE = 1.5 -- frames of phase difference left alone on screen
 local RETIME = 4 -- frames our time line may be off the server's before it is moved
 local EASE = 0.5 -- frames per frame a move is eased in by (no jump back on screen)
 local FAMILIES = {
-    { pres = { "woodie_chop_pre", "woodie_chop_atk_pre" }, lag = "woodie_chop_lag", loop = "woodie_chop_loop", period = 10 },
-    { pres = { "chop_pre" }, lag = "chop_lag", loop = "chop_loop", period = 14 },
-    { pres = { "pickaxe_pre" }, lag = "pickaxe_lag", loop = "pickaxe_loop", period = 14 }, -- mine, hammer
+    -- kind and hit: the frame of the loop the server performs the action on (SGwilson chop, mine)
+    { pres = { "woodie_chop_pre", "woodie_chop_atk_pre" }, lag = "woodie_chop_lag", loop = "woodie_chop_loop", period = 10,
+        kind = "chop", hit = 2 },
+    { pres = { "chop_pre" }, lag = "chop_lag", loop = "chop_loop", period = 14, kind = "chop", hit = 2 },
+    { pres = { "pickaxe_pre" }, lag = "pickaxe_lag", loop = "pickaxe_loop", period = 14, kind = "mine", hit = 7 }, -- mine, hammer
     { pres = { "shovel_pre" }, lag = "shovel_lag", loop = "shovel_loop", period = 35 },
 }
 local START_STATES = { chop_start = true, mine_start = true, dig_start = true, hammer_start = true }
@@ -32,6 +34,11 @@ local WORK_STATES = { "chop_start", "chop", "mine_start", "mine", "dig_start", "
 
 local s = nil
 local WORK_HASH = {}
+-- names tried when something else is on you (the engine has no name getter, only a hash)
+local KNOWN = { "idle_loop", "chop_pre", "chop_lag", "chop_loop", "chop_pst", "woodie_chop_pre", "woodie_chop_atk_pre",
+    "woodie_chop_lag", "woodie_chop_loop", "woodie_chop_pst", "pickaxe_pre", "pickaxe_lag", "pickaxe_loop", "pickaxe_pst",
+    "shovel_pre", "shovel_lag", "shovel_loop", "shovel_pst", "run_pre", "run_loop", "run_pst", "hit", "idle_inaction",
+    "atk_pre", "atk", "pickup", "pickup_pst", "funnyidle" }
 
 local function Now() return Util.Now() end
 local function Ms(t) return math.floor(t * 1000 + 0.5) end
@@ -86,9 +93,21 @@ local function GoesOn()
         or (CONTROL_CONTROLLER_ACTION ~= nil and input:IsControlPressed(CONTROL_CONTROLLER_ACTION))
 end
 
+local function AnimName(anim)
+    for _, n in ipairs(KNOWN) do
+        if anim:IsCurrentAnimation(n) then return n end
+    end
+    local h = anim.GetCurrentAnimationHash ~= nil and anim:GetCurrentAnimationHash() or nil
+    return string.format("#%s, %s frames", tostring(h), tostring(anim:GetCurrentAnimationNumFrames()))
+end
+
 local function Stop(why)
-    if s.run ~= nil and s.run.swings > 0 and why ~= nil then
-        Note(string.format("%d swings shown ahead, re-timed %d times; %s", s.run.swings, s.run.retimed, why))
+    local run = s.run
+    if run ~= nil and run.swings > 0 and why ~= nil then
+        local c = run.caught
+        Note(string.format("%d swings shown ahead (%d hits on your time line), re-timed %d times; the server's "
+            .. "swings put back: in the post-update %d, in the wall update %d, after physics %d; %s", run.swings,
+            run.hits or 0, run.retimed, c.post, c.wall, c.phys, why))
     end
     s.run = nil
 end
@@ -138,10 +157,13 @@ local function Tick()
     local inst = s.inst
     local anim = inst.AnimState
     local now = Now()
+    if s.tick_now == now then return end -- once a game frame
+    s.tick_now = now
     local state = LocalState()
     local Pipe = package.loaded["blc/pipeline"]
     local on = Future.enabled and (Pipe == nil or Pipe.enabled)
     local run = s.run
+    if Future.impact ~= nil then Util.SafeCall("hits", Future.impact.Tick, on) end
     local fresh = START_STATES[tostring(state)] and s.state ~= state -- a new start of work (the next tree)
     s.state = state
     if fresh and run ~= nil then
@@ -154,6 +176,7 @@ local function Tick()
         if fam == nil then return end
         local pre = PreOf(anim, fam)
         run = { fam = fam, pre = pre or fam.pres[1], k = -1, swings = 0, retimed = 0, pending = 0, seen = false,
+            caught = { post = 0, wall = 0, phys = 0 }, foreign = 0,
             t0 = now - (pre ~= nil and anim:GetCurrentAnimationTime() or 0),
             pre_len = pre ~= nil and anim:GetCurrentAnimationLength() or 8 * F }
         s.run = run
@@ -180,15 +203,22 @@ local function Tick()
     local pre = PreOf(anim, fam)
     local is_loop = anim:IsCurrentAnimation(fam.loop)
     if pre == nil and not is_loop and not anim:IsCurrentAnimation(fam.lag) then
-        return Stop("something else on screen") -- a hit, an animation of the server's: not ours to touch
+        -- a hit, an animation of the server's: not ours to touch
+        return Stop("something else on screen: " .. AnimName(anim))
     end
     local t = anim:GetCurrentAnimationTime()
     local last = s.last
+    if s.arrival ~= nil then
+        -- one the frame updates caught and put back before it was drawn: checked here all the same
+        Arrived(run, now, s.arrival.start, s.arrival.pre)
+        s.arrival = nil
+    end
     if last ~= nil and (pre ~= nil or is_loop) then
         local same = (pre ~= nil and last.name == pre) or (is_loop and last.name == fam.loop)
         if not same or t + TOLERANCE * F < last.phase + (now - last.t) then
             -- a swing of the server's: it went back, or it is not what we showed
             Arrived(run, now, now - t, pre ~= nil)
+            run.caught.post = run.caught.post + 1
         end
     end
     local name, phase = Predicted(run, now)
@@ -199,6 +229,60 @@ local function Tick()
         anim:SetTime(phase) -- (while easing every frame: the engine's own clock runs at full speed)
     end
     s.last = { name = name, phase = phase, t = now }
+    s.wall = 0
+    -- our swing reaches the frame its hit lands on: what it hits reacts now, not a round trip later
+    if Future.impact ~= nil and fam.hit ~= nil and name == fam.loop and phase >= (fam.hit - 0.5) * F
+        and (run.hit_k == nil or run.hit_k < run.k) then
+        run.hit_k = run.k
+        run.hits = (run.hits or 0) + 1
+        Util.SafeCall("hit", Future.impact.Hit, fam.kind)
+    end
+end
+
+-- In the frame updates (each drawn frame): if the server's start or swing came in after the
+-- post-update, ours is put back before it is drawn, and its start kept for the next check. Anything
+-- else on you is not touched (a hit, your walk: the next check stops the future view), only noted.
+local function Hold(where, dt)
+    if s == nil or s.run == nil or s.last == nil then return end
+    if dt ~= nil then s.wall = (s.wall or 0) + dt end
+    local run, last = s.run, s.last
+    local fam = run.fam
+    local anim = s.inst.AnimState
+    local wall = s.wall or 0
+    local expect = last.phase + wall
+    local t = anim:GetCurrentAnimationTime()
+    local pre = PreOf(anim, fam)
+    local mine = anim:IsCurrentAnimation(last.name)
+    if mine and t + TOLERANCE * F >= expect then return end -- as we left it
+    if mine or pre ~= nil or anim:IsCurrentAnimation(fam.loop) then
+        s.arrival = s.arrival or { start = Now() + wall - t, pre = pre ~= nil }
+    elseif anim:IsCurrentAnimation(fam.lag) then
+        -- the waiting pose the game queued after the start: not the server's, just ours to go on
+    else
+        if run.foreign < 3 then
+            Note(string.format("a frame of '%s' on you before drawing (%s; local %s, server %s)", AnimName(anim), where,
+                tostring(LocalState()), ServerWorking() and "working" or "not working"))
+        end
+        run.foreign = run.foreign + 1
+        return
+    end
+    -- exactly what the last check showed, run on (moving on to the next swing is the check's)
+    if not mine then anim:PlayAnimation(last.name) end
+    anim:SetTime(math.min(expect, anim:GetCurrentAnimationLength()))
+    run.caught[where] = run.caught[where] + 1
+end
+
+-- the engine calls this global after physics each drawn frame: one more look before drawing
+local phys_hooked = false
+local function HookPhysics()
+    if phys_hooked then return end
+    local old = rawget(_G, "PostPhysicsWallUpdate")
+    if type(old) ~= "function" then return end
+    phys_hooked = true
+    _G.PostPhysicsWallUpdate = function(dt, ...)
+        old(dt, ...)
+        if s ~= nil then Util.SafeCall("future view hold", Hold, "phys") end
+    end
 end
 
 function Future.Start(inst)
@@ -209,16 +293,37 @@ function Future.Start(inst)
         for _, name in ipairs(WORK_STATES) do WORK_HASH[h(name)] = true end
     end
     s = { inst = inst }
-    s.task = inst:DoPeriodicTask(F, function() Util.SafeCall("future view", Tick) end)
+    -- after the game frame, when the server's animations of this frame are in and before it is
+    -- drawn (the game syncs animations there too: updatelooper post-update, e.g. DoSyncAnim):
+    -- a swing or a tree's shake the server restarts is put back to ours before it shows. Run as
+    -- an ordinary task, it could come before them, and the server's frame 0 showed for a frame.
+    local ok, driver = pcall(function()
+        local d = CreateEntity()
+        d.entity:SetCanSleep(false)
+        d.persists = false
+        d:AddTag("CLASSIFIED")
+        d:AddComponent("updatelooper")
+        d.components.updatelooper:AddPostUpdateFn(function() Util.SafeCall("future view", Tick) end)
+        d.components.updatelooper:AddOnWallUpdateFn(function(_, dt) Util.SafeCall("future view hold", Hold, "wall", dt) end)
+        return d
+    end)
+    if ok and driver ~= nil then
+        s.driver = driver
+        HookPhysics()
+    else
+        s.task = inst:DoPeriodicTask(F, function() Util.SafeCall("future view", Tick) end)
+    end
 end
 
 function Future.Stop(inst)
     if s == nil or (inst ~= nil and inst ~= s.inst) then return end
     if s.task ~= nil then s.task:Cancel() end
+    if s.driver ~= nil and s.driver.IsValid ~= nil and s.driver:IsValid() then s.driver:Remove() end
     s = nil
 end
 
 function Future.Active() return s ~= nil and s.run ~= nil end
+function Future.Lead() return Lead() end
 
 function Future._state() return s end
 

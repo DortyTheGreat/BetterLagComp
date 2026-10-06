@@ -10,6 +10,9 @@ A client-side **Don't Starve Together** mod that adds a better client-side lag c
 
 > ⚠️ **Status: Beta.** The mod currently supports a limited set of actions and is under development.
 
+> **Keep the game's own Lag Compensation on** (Options → Lag Compensation: *Predictive*): the mod builds on it.
+> Press **F8** in game to switch fast chains off and on, to compare.
+
 [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3813222728) 
 
 ## How it works
